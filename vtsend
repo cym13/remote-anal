@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+
+"""
+A simple interface to VirusTotal API
+
+Usage: vtsend [-h|-v] [-k KEY] URI...
+
+Options:
+    -h, --help          Print this help and exit
+    -v, --version       Print version and exit
+    -k, --apikey KEY    Use KEY to authenticate to the api.
+                        If KEY is a path to a file, reads the key from there.
+                        Default is ~/.vtsend.key
+
+Arguments:
+    URI     URI can be 3 things:
+            - an url (identified by the presence of ://) pointing to
+              a potentially malicious file
+            - a path to a suspicious file
+              (if bigger than 32MB, falls back to MD5)
+            - a MD5 checksum of a suspicious file
+"""
+
+import re
+from path   import path
+from docopt import docopt
+
+def api_key(key, *, _reg=re.compile("[0-9a-f]{64}")):
+    if _reg.fullmatch(key) is not None:
+        return key
+
+    if key is not None:
+        try:
+            return open(path.expanduser(key)).read()
+        except FileNotFoundError:
+            pass
+
+    try:
+        return open(path.expanduser("~/.vtsend.key")).read()
+    except FileNotFoundError as e:
+        return None
+
+
+def main():
+    args = docopt(__doc__, version="vtsend 0.1 - VirusTotal API v2.0")
+    key  = api_key(args["--apikey"])
+    uris = args["URI"]
+
+if __name__ == "__main__":
+    main()
