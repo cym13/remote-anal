@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+
+"""
+Analyse malicious files using online apis
+
+Usage: remote-anal [-h|-v] [-k KEY] URI...
+
+Options:
+    -h, --help          Print this help and exit
+    -v, --version       Print version and exit
+    -k, --apikey KEY    Use KEY to authenticate to the VirusTotal api.
+                        If KEY is a path to a file, reads the key from there.
+                        Default is ~/.vtsend.key
+
+Arguments:
+    URI     URI can be 3 things:
+            - an url (identified by the presence of ://) pointing to
+              a potentially malicious file
+            - a path to a suspicious file
+              (if bigger than 32MB, falls back to MD5)
+            - a MD5 checksum of a suspicious file
+              No key is required for MD5 checksums as VirusTotal isn't used
+"""
+
+import re
+import os
+import sys
+import hashlib
+import urllib
+import urllib2
+from path       import Path
+from docopt     import docopt
+from subprocess import getoutput
+
+
+def api_key(key, *, key_reg=re.compile("[0-9a-f]{64}")):
+    if key is not None:
+        if key_reg.fullmatch(key) is not None:
+            return key
+
+    exp_path = lambda x: Path(x).expanduser()
+
+    path = exp_path(key)
+    if not os.path.exists(path):
+        path = exp_path("~/.vtsend.key")
+
+    try:
+        return open(path).read(64)
+    except FileNotFoundError:
+        return None
+
+
+def post_request(command, resource, key):
+    # If MD5, use team-cymru's API
+    if command == "send_md5":
+        return tc_request(resource)
+
+    if command == "md5_report":
+        return resource
+
+    # We're using VirusTotal
+    return vt_request(command, resource, key)
+
+
+VT_API_URLS = {
+    "send_file": "https://www.virustotal.com/vtapi/v2/file/scan",
+    "send_url": "https://www.virustotal.com/vtapi/v2/url/scan",
+    "file_report": "https://www.virustotal.com/vtapi/v2/file/report",
+    "url_report": "https://www.virustotal.com/vtapi/v2/url/report"
+}
+
+
+def vt_request(command, resource, key):
+    url        = VT_API_URLS[command]
+    parameters = {"resource": resource, "apikey": key}
+    data       = urllib.urlencode(parameters)
+    request    = urllib2.Request(url, data);
+    response   = urllib2.urlopen(request)
+    return response.read()
+
+
+def tc_request(resource, *, md5_reg("[0-9a-f]{32}")):
+    resource = resource.lower()
+
+    if md5_reg.fullmatch(resource) is None:
+        sys.exit("Incorrect hash" + resource)
+
+    return tc_parse(getoutput("whois -h hash.cymru.com " + resource))
+
+
+def tc_parse(data):
+    digest, time, status = getoutput.split()
+    result = {"md5": digest, "timestamp": time}
+
+    if status == "NO_DATA":
+        result["status"] = "UKNOWN"
+    else:
+        result = status_from_percentage(int(status))
+
+    return result
+
+
+def status_from_percentage(positive, total=100):
+    ratio = positive * 100 // total
+
+    states = {  0: "CLEAN",
+               40: "LOW",
+               80: "MEDIUM",
+               99: "HIGH",
+              100: "ALERT" }
+
+    for rate, state in states.items:
+        if ratio <= rate:
+            return state
+
+
+def file_digest(path, key):
+    checksum = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            checksum.update(chunk)
+    return checksum.hexdigest()
+
+
+def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
+   """Detach a process from the controlling terminal and run it in the
+   background as a daemon.
+   """
+    if (hasattr(os, "devnull")):
+       REDIRECT_TO = os.devnull
+    else:
+       REDIRECT_TO = "/dev/null"
+
+   try:
+      pid = os.fork()
+   except OSError, e:
+      raise Exception, "%s [%d]" % (e.strerror, e.errno)
+
+   if (pid == 0):
+      os.setsid()
+
+      try:
+         pid = os.fork()
+      except OSError, e:
+         raise Exception, "%s [%d]" % (e.strerror, e.errno)
+
+      if (pid == 0):
+         os.chdir(WORKDIR)
+         os.umask(UMASK)
+      else:
+         os._exit(0)
+   else:
+      os._exit(0)
+
+   import resource
+   maxfd = resource.getrlimit(resource.RLIMIT_NOFILE)[1]
+   if (maxfd == resource.RLIM_INFINITY):
+      maxfd = MAXFD
+
+   for fd in range(0, maxfd):
+      try:
+         os.close(fd)
+      except OSError:
+         pass
+
+   os.open(REDIRECT_TO, os.O_RDWR)
+
+   os.dup2(0, 1)
+   os.dup2(0, 2)
+
+   return(0)
+
+
+def main():
+    args = docopt(__doc__, version="vtsend 0.1 - VirusTotal API v2.0")
+    key  = api_key(args["--apikey"])
+    uris = args["URI"]
+
+    responses = []
+    for uri in uris:
+        if "://" in uri:
+            if key is None:
+                sys.exit("Unable to open file: " + args["--apikey"])
+            resp = post_request("send_url", uri, key)
+
+        elif re.fullmatch("([a-f0-9]|[A-F0-9]){32}", uri):
+            resp = post_request("send_md5", uri.lower(), key)
+
+        else:
+            path = Path(uri).expanduser()
+
+            if os.stat(path).st_size < 33554432:
+                if key is None:
+                    sys.exit("Unable to open file: " + args["--apikey"])
+                resp = post_request("send_file", uri, key)
+            else:
+                resp = post_request("send_md5", file_digest(path), key)
+
+        responses.append(resp)
+
+    # daemonize()
+
+    for resp in responses:
+        post_request(*resp, key)
+
+
+if __name__ == "__main__":
+    main()
