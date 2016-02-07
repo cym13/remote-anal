@@ -76,6 +76,7 @@ def vt_send(filename, key):
     files = {"file": open(filename, 'rb')}
     res   = requests.post(url, data=attr, files=files)
 
+    # TODO: manage time
     if res.status_code == self.HTTP_OK:
         print(res.text)
     else:
@@ -87,6 +88,7 @@ def vt_scan(resource, key):
     attr = {"apikey": key, "url":resource}
     res  = requests.post(url, data=attr)
 
+    # TODO: manage time
     if res.status_code == self.HTTP_OK:
         print(res.text)
     else:
@@ -121,9 +123,7 @@ def retrieve_report(resource):
 
     4 retrieval per min if only public API used
     """
-    if self.has_sent_retrieve_req and self.is_public_api:
-        time.sleep(30)
-
+    # TODO: manage time
     url = self.URL_BASE + "file/report"
     params = {"apikey": self.apikey, "resource": resource}
     res = requests.post(url, data=params)
