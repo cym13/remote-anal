@@ -176,12 +176,14 @@ def main():
     key  = api_key(args["--apikey"])
     uris = args["URI"]
 
-    responses = []
+    need_daemon = False
+    responses   = []
     for uri in uris:
         if "://" in uri:
             if key is None:
                 sys.exit("Unable to open file: " + args["--apikey"])
             resp = post_request("send_url", uri, key)
+            need_daemon = True
 
         elif re.fullmatch("([a-f0-9]|[A-F0-9]){32}", uri):
             resp = post_request("send_md5", uri.lower(), key)
@@ -193,12 +195,14 @@ def main():
                 if key is None:
                     sys.exit("Unable to open file: " + args["--apikey"])
                 resp = post_request("send_file", uri, key)
+                need_daemon = True
             else:
                 resp = post_request("send_md5", file_digest(path), key)
 
         responses.append(resp)
 
-    # daemonize()
+    if need_daemon:
+        daemonize()
 
     for resp in responses:
         post_request(*resp, key)
