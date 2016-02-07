@@ -25,9 +25,10 @@ Arguments:
 import re
 import os
 import sys
+import json
+import time
 import hashlib
-import urllib
-import urllib2
+import requests
 from path       import Path
 from docopt     import docopt
 from subprocess import getoutput
@@ -59,24 +60,75 @@ def post_request(command, resource, key):
         return resource
 
     # We're using VirusTotal
-    return vt_request(command, resource, key)
+    if command == "send_file":
+        return vt_send(resource, key)
+
+    if command == "scan_url":
+        return vt_scan(resource, key)
+
+    if "report" in command:
+        return vt_report(command, resource, key)
 
 
-VT_API_URLS = {
-    "send_file": "https://www.virustotal.com/vtapi/v2/file/scan",
-    "send_url": "https://www.virustotal.com/vtapi/v2/url/scan",
-    "file_report": "https://www.virustotal.com/vtapi/v2/file/report",
-    "url_report": "https://www.virustotal.com/vtapi/v2/url/report"
-}
+def vt_send(filename, key):
+    url   = "https://www.virustotal.com/vtapi/v2/file/send"
+    attr  = {"apikey": key}
+    files = {"file": open(filename, 'rb')}
+    res   = requests.post(url, data=attr, files=files)
+
+    if res.status_code == self.HTTP_OK:
+        print(res.text)
+    else:
+        print(res.text)
 
 
-def vt_request(command, resource, key):
-    url        = VT_API_URLS[command]
-    parameters = {"resource": resource, "apikey": key}
-    data       = urllib.urlencode(parameters)
-    request    = urllib2.Request(url, data);
-    response   = urllib2.urlopen(request)
-    return response.read()
+def vt_scan(resource, key):
+    url  = "https://www.virustotal.com/vtapi/v2/url/send"
+    attr = {"apikey": key, "url":resource}
+    res  = requests.post(url, data=attr)
+
+    if res.status_code == self.HTTP_OK:
+        print(res.text)
+    else:
+        print(res.text)
+
+
+def vt_report(resource, key):
+    if command == "file_report":
+        url = "https://www.virustotal.com/vtapi/v2/file/report"
+        res = file_digest(filename, hashlib.sha256)
+
+    elif command == "url_report":
+        url = "https://www.virustotal.com/vtapi/v2/md5/report"
+        res = resource
+
+    else:
+        return None
+
+    response = retrieve_report(res)
+
+    if response.status_code == self.HTTP_OK:
+        resmap = json.loads(response.text)
+        print(resmap)
+    else:
+        print(response.text)
+
+
+
+def retrieve_report(resource):
+    """
+    Retrieve Report for the file checksum
+
+    4 retrieval per min if only public API used
+    """
+    if self.has_sent_retrieve_req and self.is_public_api:
+        time.sleep(30)
+
+    url = self.URL_BASE + "file/report"
+    params = {"apikey": self.apikey, "resource": resource}
+    res = requests.post(url, data=params)
+    self.has_sent_retrieve_req = True
+    return res
 
 
 def tc_request(resource, *, md5_reg("[0-9a-f]{32}")):
@@ -114,11 +166,11 @@ def status_from_percentage(positive, total=100):
             return state
 
 
-def file_digest(path, key):
-    checksum = hashlib.md5()
-    with open(path, "rb") as f:
+def file_digest(path, algo=hashlib.md5):
+    checksum = algo()
+    with open(path, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
-            checksum.update(chunk)
+            chucksum.update(data)
     return checksum.hexdigest()
 
 
@@ -170,7 +222,6 @@ def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
 
    return(0)
 
-
 def main():
     args = docopt(__doc__, version="vtsend 0.1 - VirusTotal API v2.0")
     key  = api_key(args["--apikey"])
@@ -182,7 +233,7 @@ def main():
         if "://" in uri:
             if key is None:
                 sys.exit("Unable to open file: " + args["--apikey"])
-            resp = post_request("send_url", uri, key)
+            resp = post_request("scan_url", uri, key)
             need_daemon = True
 
         elif re.fullmatch("([a-f0-9]|[A-F0-9]){32}", uri):
@@ -191,6 +242,7 @@ def main():
         else:
             path = Path(uri).expanduser()
 
+            # VirusTotal doesn't accept files bigger than 32MB
             if os.stat(path).st_size < 33554432:
                 if key is None:
                     sys.exit("Unable to open file: " + args["--apikey"])
