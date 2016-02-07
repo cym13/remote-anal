@@ -103,13 +103,13 @@ def tc_parse(data):
 def status_from_percentage(positive, total=100):
     ratio = positive * 100 // total
 
-    states = {  0: "CLEAN",
-               40: "LOW",
-               80: "MEDIUM",
-               99: "HIGH",
-              100: "ALERT" }
+    states = [(  0: "CLEAN" ),
+              ( 40: "LOW"   ),
+              ( 80: "MEDIUM"),
+              ( 99: "HIGH"  ),
+              (100: "ALERT" )]
 
-    for rate, state in states.items:
+    for rate, state in states:
         if ratio <= rate:
             return state
 
