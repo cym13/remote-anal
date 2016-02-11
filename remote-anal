@@ -3,7 +3,7 @@
 """
 Analyse malicious files using online apis
 
-Usage: remote-anal [-h|-v] [-k KEY] URI...
+Usage: remote-anal [-h|-v] [-k KEY] [-f FILE] URI...
 
 Options:
     -h, --help          Print this help and exit
@@ -11,6 +11,8 @@ Options:
     -k, --apikey KEY    Use KEY to authenticate to the VirusTotal api.
                         If KEY is a path to a file, reads the key from there.
                         Default is ~/.vtsend.key
+    -f, --file FILE     Log file to use
+                        Default is /var/log/remote-anal.log
 
 Arguments:
     URI     URI can be 3 things:
@@ -258,6 +260,7 @@ def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
 def main():
     args = docopt(__doc__, version="vtsend 0.9 - VirusTotal API v2.0")
     key  = api_key(args["--apikey"])
+    outf = args["--file"]
     uris = args["URI"]
 
     need_daemon = False
@@ -290,13 +293,19 @@ def main():
         print("REQUEST\n" + str(resp))
         responses.append(resp)
 
-    need_daemon = False # For debug, don't daemonize
-    if need_daemon:
+    # If writting to stdout daemonizing gets in the way
+    if need_daemon and outf != "-":
         daemonize()
+
+    if outf == "-":
+        f = sys.stdout
+    else:
+        f = open(outf, "a")
 
     for resp in responses:
         print("RESPONSE\n" + str(post_request(*resp, key)))
 
+    f.close()
 
 if __name__ == "__main__":
     main()
