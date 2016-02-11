@@ -95,7 +95,6 @@ def vt_send(filename, key):
     files = {"file": open(filename, 'rb')}
     res   = requests.post(url, data=attr, files=files)
 
-    # TODO: manage time
     if res.status_code == 200:
         return res.text
     else:
@@ -110,7 +109,6 @@ def vt_scan(resource, key):
     attr = {"apikey": key, "url":resource}
     res  = requests.post(url, data=attr)
 
-    # TODO: manage time
     if res.status_code == 200:
         return res.text
     else:
@@ -133,12 +131,7 @@ def vt_report(command, resource, key):
         return None
 
     response = retrieve_report(res, url, key)
-
-    if response.status_code == 200:
-        resmap = json.loads(response.text)
-        return resmap
-    else:
-        return response.text
+    return json.loads(response.text)
 
 
 
@@ -149,6 +142,11 @@ def retrieve_report(resource, url, key):
     # TODO: manage time
     params = {"apikey": key, "resource": resource}
     res = requests.post(url, data=params)
+
+    while res.status_code == 204 or json.loads(res.text)["response_code"] == -2:
+        time.sleep(15)
+        res = requests.post(url, data=params)
+
     return res
 
 
