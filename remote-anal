@@ -258,7 +258,7 @@ def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
 
 
 def main():
-    args = docopt(__doc__, version="vtsend 0.1 - VirusTotal API v2.0")
+    args = docopt(__doc__, version="vtsend 0.9 - VirusTotal API v2.0")
     key  = api_key(args["--apikey"])
     uris = args["URI"]
 
