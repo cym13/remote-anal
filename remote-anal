@@ -34,21 +34,22 @@ from docopt     import docopt
 from subprocess import getoutput
 
 
-def exp_path(path):
-    return Path(path).expanduser()
-
-
 def api_key(key, *, key_reg=re.compile("[0-9a-f]{64}")):
+    """
+    Recover the API key from either command line arguments or a file
+    """
+    default_path = "~/.virustotal.apikey"
+
     if key is None:
-        key = "~/.vtsend.key"
+        key = default_path
 
     if key is not None:
         if key_reg.fullmatch(key) is not None:
             return key
 
-    path = exp_path(key)
+    path = Path(key).expanduser()
     if not os.path.exists(path):
-        path = exp_path("~/.vtsend.key")
+        path = Path(default_path).expanduser()
 
     try:
         return open(path).read(64)
@@ -57,6 +58,16 @@ def api_key(key, *, key_reg=re.compile("[0-9a-f]{64}")):
 
 
 def post_request(command, resource, key):
+    """
+    Dispatch a request to its handler.
+    `command' must be one of:
+        - send_md5
+        - send_file
+        - send_url
+        - md5_report
+        - file_report
+        - url_report
+    """
     # If MD5, use team-cymru's API
     if command == "send_md5":
         return tc_request(resource)
@@ -76,6 +87,9 @@ def post_request(command, resource, key):
 
 
 def vt_send(filename, key):
+    """
+    Send a file to VirusTotal
+    """
     url   = "https://www.virustotal.com/vtapi/v2/file/scan"
     attr  = {"apikey": key}
     files = {"file": open(filename, 'rb')}
@@ -89,6 +103,9 @@ def vt_send(filename, key):
 
 
 def vt_scan(resource, key):
+    """
+    Send a url to VirusTotal
+    """
     url  = "https://www.virustotal.com/vtapi/v2/url/scan"
     attr = {"apikey": key, "url":resource}
     res  = requests.post(url, data=attr)
@@ -101,6 +118,9 @@ def vt_scan(resource, key):
 
 
 def vt_report(command, resource, key):
+    """
+    Get a report from VirusTotal
+    """
     if command == "file_report":
         url = "https://www.virustotal.com/vtapi/v2/file/report"
         res = json.loads(resource)["sha256"]
@@ -124,7 +144,7 @@ def vt_report(command, resource, key):
 
 def retrieve_report(resource, url, key):
     """
-    Retrieve Report for the file checksum
+    Retrieve report for the given file
     """
     # TODO: manage time
     params = {"apikey": key, "resource": resource}
@@ -133,6 +153,9 @@ def retrieve_report(resource, url, key):
 
 
 def tc_request(resource, *, md5_reg=re.compile("[0-9a-f]{32}")):
+    """
+    Send a MD5 to Team-Cymru
+    """
     resource = resource.lower()
 
     if md5_reg.fullmatch(resource) is None:
@@ -142,6 +165,9 @@ def tc_request(resource, *, md5_reg=re.compile("[0-9a-f]{32}")):
 
 
 def tc_parse(data):
+    """
+    Parse a Team-Cymru report
+    """
     digest, time, status = data.split()
     result = {"md5": digest, "timestamp": time}
 
@@ -154,6 +180,9 @@ def tc_parse(data):
 
 
 def status_from_percentage(positive, total=100):
+    """
+    Get a named status from a percentage, useful for logging
+    """
     ratio = positive * 100 // total
 
     states = [(  0, "CLEAN" ),
@@ -168,6 +197,9 @@ def status_from_percentage(positive, total=100):
 
 
 def file_digest(path, algo=hashlib.md5):
+    """
+    Efficiently get a digest for a file, default algorithm is MD5
+    """
     checksum = algo()
     with open(path, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
@@ -176,7 +208,8 @@ def file_digest(path, algo=hashlib.md5):
 
 
 def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
-   """Detach a process from the controlling terminal and run it in the
+   """
+   Detach a process from the controlling terminal and run it in the
    background as a daemon.
    """
    if  hasattr(os, "devnull"):
@@ -221,7 +254,8 @@ def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
    os.dup2(0, 1)
    os.dup2(0, 2)
 
-   return(0)
+   return 0
+
 
 def main():
     args = docopt(__doc__, version="vtsend 0.1 - VirusTotal API v2.0")
@@ -243,7 +277,7 @@ def main():
                     post_request("send_md5", uri.lower(), key))
 
         else:
-            path = exp_path(uri)
+            path = Path(uri).expanduser()
 
             # VirusTotal doesn't accept files bigger than 32MB
             if os.stat(path).st_size < 33554432:
