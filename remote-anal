@@ -171,7 +171,7 @@ def file_digest(path, algo=hashlib.md5):
     checksum = algo()
     with open(path, 'rb') as f:
         for chunk in iter(lambda: f.read(4096), b""):
-            chucksum.update(data)
+            checksum.update(chunk)
     return checksum.hexdigest()
 
 
