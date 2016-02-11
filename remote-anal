@@ -326,15 +326,16 @@ def main():
     if need_daemon and outf != "-":
         daemonize()
 
-    if outf == "-":
-        f = sys.stdout
-    else:
-        f = open(outf, "a")
-
     for resp in responses:
-        f.write(log_format(post_request(*resp, key)))
+        log_line = log_format(post_request(*resp, key))
 
-    f.close()
+        if outf == "-":
+            f = sys.stdout
+        else:
+            f = open(outf, "a")
+
+        f.write(log_line)
+        f.close()
 
 if __name__ == "__main__":
     main()
