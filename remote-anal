@@ -3,7 +3,7 @@
 """
 Analyse malicious files using online apis
 
-Usage: remote-anal [-h|-v] [-k KEY] [-f FILE] URI...
+Usage: remote-anal [-h|-v] [-k KEY] -f FILE URI...
 
 Options:
     -h, --help          Print this help and exit
@@ -31,9 +31,9 @@ import json
 import time
 import hashlib
 import requests
-from path       import Path
 from docopt     import docopt
 from subprocess import getoutput
+from os.path    import expanduser, exists
 
 
 def api_key(key, *, key_reg=re.compile("[0-9a-f]{64}")):
@@ -49,9 +49,9 @@ def api_key(key, *, key_reg=re.compile("[0-9a-f]{64}")):
         if key_reg.fullmatch(key) is not None:
             return key
 
-    path = Path(key).expanduser()
-    if not os.path.exists(path):
-        path = Path(default_path).expanduser()
+    path = expanduser(key)
+    if not exists(path):
+        path = expanduser(default_path)
 
     try:
         return open(path).read(64)
@@ -306,7 +306,7 @@ def main():
                     post_request("send_md5", uri.lower(), key))
 
         else:
-            path = Path(uri).expanduser()
+            path = expanduser(uri)
 
             # VirusTotal doesn't accept files bigger than 32MB
             if os.stat(path).st_size < 33554432:
@@ -325,7 +325,8 @@ def main():
         daemonize()
 
     for resp in responses:
-        log_line = log_format(post_request(*resp, key))
+        command, response = resp
+        log_line = log_format(post_request(command, response, key))
 
         if outf == "-":
             f = sys.stdout
