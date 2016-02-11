@@ -126,7 +126,7 @@ def vt_report(command, resource, key):
         res = json.loads(resource)["sha256"]
 
     elif command == "url_report":
-        url = "https://www.virustotal.com/vtapi/v2/md5/report"
+        url = "https://www.virustotal.com/vtapi/v2/url/report"
         res = resource
 
     else:
