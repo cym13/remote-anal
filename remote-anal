@@ -24,6 +24,8 @@ Arguments:
               No key is required for MD5 checksums as VirusTotal isn't used
 """
 
+# TODO: format logs on output
+
 import re
 import os
 import sys
@@ -85,7 +87,7 @@ def post_request(command, resource, key):
         return vt_scan(resource, key)
 
     if "report" in command:
-        return vt_report(command, resource, key)
+        return vt_parse_report(vt_report(command, resource, key), resource)
 
 
 def vt_send(filename, key):
@@ -123,18 +125,36 @@ def vt_report(command, resource, key):
     """
     if command == "file_report":
         url = "https://www.virustotal.com/vtapi/v2/file/report"
-        res = json.loads(resource)["scan_id"]
-
     elif command == "url_report":
         url = "https://www.virustotal.com/vtapi/v2/url/report"
-        res = resource
-
     else:
         return None
 
+    res = json.loads(resource)["scan_id"]
     response = retrieve_report(res, url, key)
     return json.loads(response.text)
 
+
+def vt_parse_report(response, resource):
+    """
+    Parse a VirusTotal report into a normalized format
+    """
+    nb_tested   = len(response["scans"])
+    nb_detected = sum(1 for av,res in response["scans"].items()
+                        if res["detected"])
+
+    if "md5" in response:
+        md5 = response["md5"]
+
+    elif "url" in response:
+        dig = hashlib.md5()
+        dig.update(response["url"].encode("utf8"))
+        md5 = dig.hexdigest()
+
+    return {"timestamp": int(time.time()),
+            "status":    status_from_percentage(nb_detected / nb_tested),
+            "md5":       md5,
+            "resource":  json.loads(resource)["resource"]}
 
 
 def retrieve_report(resource, url, key):
@@ -169,7 +189,7 @@ def tc_parse(data):
     Parse a Team-Cymru report
     """
     digest, time, status = data.split()
-    result = {"md5": digest, "timestamp": time}
+    result = {"resource": digest, "md5": digest, "timestamp": time}
 
     if status == "NO_DATA":
         result["status"] = "UKNOWN"
@@ -194,6 +214,16 @@ def status_from_percentage(positive, total=100):
     for rate, state in states:
         if ratio <= rate:
             return state
+
+
+def log_format(result):
+    """
+    Normalize the log format to a single line:  timestamp|status|md5|resource
+    """
+    return '|'.join((str(result["timestamp"]),
+                     result["status"],
+                     result["md5"],
+                     result["resource"])) + "\n"
 
 
 def file_digest(path, algo=hashlib.md5):
@@ -290,7 +320,6 @@ def main():
                 resp = ('md5_report',
                         post_request("send_md5", file_digest(path), key))
 
-        print("REQUEST\n" + str(resp))
         responses.append(resp)
 
     # If writting to stdout daemonizing gets in the way
@@ -302,7 +331,9 @@ def main():
     else:
         f = open(outf, "a")
 
-    f.writelines(str(post_request(*resp, key)) for resp in responses)
+    for resp in responses:
+        f.write(log_format(post_request(*resp, key)))
+
     f.close()
 
 if __name__ == "__main__":
