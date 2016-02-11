@@ -302,9 +302,7 @@ def main():
     else:
         f = open(outf, "a")
 
-    for resp in responses:
-        print("RESPONSE\n" + str(post_request(*resp, key)))
-
+    f.writelines(str(post_request(*resp, key)) for resp in responses)
     f.close()
 
 if __name__ == "__main__":
