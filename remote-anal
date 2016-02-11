@@ -24,8 +24,6 @@ Arguments:
               No key is required for MD5 checksums as VirusTotal isn't used
 """
 
-# TODO: format logs on output
-
 import re
 import os
 import sys
@@ -288,7 +286,7 @@ def daemonize(*, UMASK=0, WORKDIR="/", MAXFD=1024):
 
 
 def main():
-    args = docopt(__doc__, version="vtsend 0.9 - VirusTotal API v2.0")
+    args = docopt(__doc__, version="vtsend 0.99 - VirusTotal API v2.0")
     key  = api_key(args["--apikey"])
     outf = args["--file"]
     uris = args["URI"]
